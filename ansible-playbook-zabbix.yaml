@@ -1,0 +1,81 @@
+---
+- name: Zabbix Agent install
+  hosts: all
+  become: yes
+  tasks:
+  - name: install Python e agent zabbix
+    apt:
+      name: ['python', 'python-pip']
+      update_cache: yes
+      state: present
+    when: (ansible_os_family == "Debian") or (ansible_os_family == "Ubuntu")
+
+  - name: Registro de sistema operacional
+    shell: lsb_release -si | tr 'A-Z' 'a-z'
+    register: SO
+
+  - name: Registro da versao do sistema operacional
+    shell: lsb_release -sc
+    register: SOVERSION
+
+  - name: Registro do nome da maquina
+    shell: hostname
+    register: hname
+
+  - name: Registro de IP
+    shell: hostname -I | awk '{print $1}'
+    register: hip
+
+  - name: Baixando biblioteca Zabbix-Agent 4.0
+    action: raw wget  https://repo.zabbix.com/zabbix/6.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_6.0-3%2Bubuntu18.04_all.deb
+
+  - name: Executando novos repositorios .deb
+    action: raw dpkg -i zabbix-release_6.0-3+ubuntu18.04_all.deb
+
+
+  - name: Atualizando repositorios
+    action: raw apt-get update
+
+  - name: Install agent-zabbix
+    apt:
+      name: zabbix-agent
+      state: latest
+      update_cache: true
+
+  - name: adicionado nome do host
+    action: raw sed -i "s/Hostname=Zabbix server/Hostname="{{ hname.stdout }}"/g" /etc/zabbix/zabbix_agentd.conf
+
+
+  - name: Iniciar agente zabbix
+    service:
+      name: zabbix-agent
+      state: started
+      enabled: yes
+
+  - name: Colocando a maquina no monitoramento
+    local_action:
+      module: zabbix_host
+      server_url: http://20.14.79.110/zabbix/
+      login_user: Admin
+      login_password: zabbix
+      host_name: '{{ hname.stdout }}'
+      visible_name: '{{ hname.stdout }}'
+      description: Instalacao e configuracao via ansible
+      host_groups:
+        - Linux servers
+      link_templates:
+        - Template OS Linux
+      status: enabled
+      interfaces:
+        - type: 1
+          main: 1
+          useip: 1
+          ip: '{{ hip.stdout }}'
+          dns: ""
+          port: 10050
+
+  - name: Iniciar agente zabbix
+    service:
+      name: zabbix-agent
+      state: restarted
+      enabled: yes
